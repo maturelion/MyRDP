@@ -37,20 +37,21 @@ jobs:
         env:
           TS_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          # Use Start-Process with ArgumentList to ensure the key is passed exactly
-          $args = @("up", "--authkey=$env:TS_KEY", "--hostname=gh-runner-$env:GITHUB_RUN_ID", "--accept-routes", "--accept-dns=false")
-          Start-Process -FilePath "$env:ProgramFiles\Tailscale\tailscale.exe" -ArgumentList $args -Wait
+          # Use a variable and quotes to prevent shell expansion issues
+          $key = "$env:TS_KEY"
+          $hostName = "gh-runner-$env:GITHUB_RUN_ID"
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$key --hostname=$hostName --accept-routes --accept-dns=false
           
           $tsIP = $null
           $retries = 0
-          while (-not $tsIP -and $retries -lt 10) {
+          while (-not $tsIP -and $retries -lt 12) {
               $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-              Start-Sleep -Seconds 5
+              Start-Sleep -Seconds 10
               $retries++
           }
           
           if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned. Exiting."
+              Write-Error "Tailscale IP not assigned. State: $(& "$env:ProgramFiles\Tailscale\tailscale.exe" status)"
               exit 1
           }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
