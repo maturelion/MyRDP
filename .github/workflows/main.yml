@@ -14,56 +14,37 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
-          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          netsh advfirewall firewall add rule name="RDP-Direct" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Secure Password
+      - name: Create RDP User
         run: |
           $Password = ConvertTo-SecureString "ArgusTesting123!" -AsPlainText -Force
           New-LocalUser -Name "RDP" -Password $Password -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
-          echo "RDP_CREDS=User: RDP | Password: ArgusTesting123!" >> $env:GITHUB_ENV
 
-      - name: Install Tailscale
-        run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
-
-      - name: Establish Tailscale Connection
+      - name: Install and Start Ngrok
         env:
-          TS_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          NGROK_AUTH_TOKEN: "2AffkxWjwdZwetjMb9aASVpjpo6_7SHRJrwa6connnETXPRKK"
         run: |
-          # Use a variable and quotes to prevent shell expansion issues
-          $key = "$env:TS_KEY"
-          $hostName = "gh-runner-$env:GITHUB_RUN_ID"
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$key --hostname=$hostName --accept-routes --accept-dns=false
-          
-          $tsIP = $null
-          $retries = 0
-          while (-not $tsIP -and $retries -lt 12) {
-              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-              Start-Sleep -Seconds 10
-              $retries++
-          }
-          
-          if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned. State: $(& "$env:ProgramFiles\Tailscale\tailscale.exe" status)"
-              exit 1
-          }
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-
-      - name: Maintain Connection
-        run: |
-          Write-Host "`n=== RDP ACCESS ==="
-          Write-Host "Address: $env:TAILSCALE_IP"
+          choco install ngrok -y --no-progress
+          ngrok config add-authtoken $env:NGROK_AUTH_TOKEN
+          Start-Process ngrok -ArgumentList "tcp 3389"
+          Start-Sleep -s 20
+          $Response = Invoke-RestMethod -Uri http://localhost:4040/api/tunnels
+          $Addr = $Response.tunnels[0].public_url
+          $Addr = $Addr -replace "tcp://", ""
+          Write-Host "`n=== PUBLIC RDP ACCESS ==="
+          Write-Host "Address: $Addr"
           Write-Host "Username: RDP"
           Write-Host "Password: ArgusTesting123!"
           Write-Host "==================`n"
-          while ($true) {
-              Write-Host "[$(Get-Date)] RDP Active"
-              Start-Sleep -Seconds 300
-          }
+          # Also save to repo for easy retrieval
+          $Addr | Out-File -FilePath "public_rdp.txt"
+          git config --global user.name "Argus Bot"
+          git config --global user.email "bot@argus.c2"
+          git add public_rdp.txt
+          git commit -m "PUBLIC_RDP: $Addr [skip ci]"
+          git push
+          while($true) { Start-Sleep -s 60 }
