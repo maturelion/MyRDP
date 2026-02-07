@@ -24,14 +24,18 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
 
-      - name: Start Tunnel and Commit Link
+      - name: Start Tunnel and Show Link
         run: |
           $File = "link.txt"
           Start-Process ssh -ArgumentList "-p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 0:localhost:3389 a.pinggy.io" -RedirectStandardOutput $File
-          Start-Sleep -s 20
+          Start-Sleep -s 15
           $Content = Get-Content $File
           if ($Content -match "a\.pinggy\.io:\d+") {
              $Addr = $matches[0]
+             echo "### 🚀 RDP Address: $Addr" >> $env:GITHUB_STEP_SUMMARY
+             echo "Username: RDP" >> $env:GITHUB_STEP_SUMMARY
+             echo "Password: ArgusTesting123!" >> $env:GITHUB_STEP_SUMMARY
+             # Also commit it
              $Addr | Out-File -FilePath "public_rdp.txt"
              git config --global user.name "Argus Bot"
              git config --global user.email "bot@argus.c2"
