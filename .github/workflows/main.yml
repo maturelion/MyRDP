@@ -24,7 +24,8 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
 
-      - name: Start Tunnel (Pinggy)
+      - name: Start Tunnel
+        id: tunnel
         run: |
           $File = "link.txt"
           Start-Process ssh -ArgumentList "-p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 0:localhost:3389 a.pinggy.io" -RedirectStandardOutput $File
@@ -32,6 +33,18 @@ jobs:
           $Content = Get-Content $File
           if ($Content -match "a\.pinggy\.io:\d+") {
              $Addr = $matches[0]
+             echo "RDP_ADDR=$Addr" >> $env:GITHUB_ENV
              Write-Host "LION_RDP_LINK: $Addr"
           }
-          Start-Sleep -s 21600 # 6 hours
+
+      - name: Report and Wait
+        run: |
+          Write-Host "`n=== RDP ACCESS ==="
+          Write-Host "Address: $env:RDP_ADDR"
+          Write-Host "Username: RDP"
+          Write-Host "Password: ArgusTesting123!"
+          Write-Host "==================`n"
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Active"
+              Start-Sleep -Seconds 300
+          }
