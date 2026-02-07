@@ -34,11 +34,12 @@ jobs:
           Remove-Item $installerPath -Force
 
       - name: Establish Tailscale Connection
+        env:
+          TS_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          # Use Base64 to bypass shell truncation
-          $B64 = "dHNrZXktYXV0aC1rU2JVYk1SWWlMMTFDTlRSTC1XZEs1MjVQOWpqQ0F0ZDRHdXd5WGpDU1FCWjRwNWl3eGg="
-          $Key = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($B64))
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey="$Key" --hostname=gh-runner-$env:GITHUB_RUN_ID --accept-routes --accept-dns=false
+          # Use Start-Process with ArgumentList to ensure the key is passed exactly
+          $args = @("up", "--authkey=$env:TS_KEY", "--hostname=gh-runner-$env:GITHUB_RUN_ID", "--accept-routes", "--accept-dns=false")
+          Start-Process -FilePath "$env:ProgramFiles\Tailscale\tailscale.exe" -ArgumentList $args -Wait
           
           $tsIP = $null
           $retries = 0
